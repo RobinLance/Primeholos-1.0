@@ -1,0 +1,1089 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Prime Holos - TCG Chase Card Tracker</title>
+<link rel="stylesheet" href="styles.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/tesseract.js/5.0.4/tesseract.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tcgdex/sdk@2/dist/tcgdex.browser.global.min.js"></script>
+</head>
+<body>
+
+<header>
+  <div class="brand display"><span class="dot"></span>Prime Holos - TCG Chase Card Tracker</div>
+  <div class="tagline">Point a camera at a card. Read the name off the frame, pull live market prices — any major TCG.</div>
+</header>
+
+<main>
+  <div class="game-switch" id="gameSwitch">
+    <button data-game="pokemon" class="active">Pokémon</button>
+    <button data-game="magic">Magic: The Gathering</button>
+    <button data-game="yugioh">Yu-Gi-Oh!</button>
+    <button data-game="justtcg">More TCGs (Lorcana, One Piece…)</button>
+  </div>
+
+  <div id="justtcgGameRow" style="display:none; margin:-16px 0 28px;">
+    <label class="eyebrow" style="display:block; margin-bottom:8px;">Which game?</label>
+    <select id="justtcgGameSelect" style="background:var(--panel); color:var(--paper); border:1px solid var(--panel-line); padding:9px 12px; border-radius:2px; font-size:13px; min-width:220px;">
+      <option value="">Loading games…</option>
+    </select>
+  </div>
+
+  <div class="stage">
+    <div class="panel">
+      <p class="eyebrow">01 · Capture</p>
+      <div class="camera-wrap">
+        <video id="video" autoplay playsinline muted></video>
+        <div class="frame-guide"></div>
+      </div>
+      <canvas id="canvas" style="display:none;"></canvas>
+      <div class="controls">
+        <button id="startCam">Turn on camera</button>
+        <button id="shootBtn" disabled>Capture frame</button>
+        <label for="fileInput"><button type="button" onclick="document.getElementById('fileInput').click()">Upload photo instead</button></label>
+        <input type="file" id="fileInput" accept="image/*" capture="environment">
+      </div>
+      <div class="status-line" id="camStatus">Camera is off. Turn it on, or upload a photo of a card.</div>
+    </div>
+
+    <div class="panel">
+      <p class="eyebrow">02 · Read &amp; confirm</p>
+      <img id="shotPreview" class="shot-preview" style="display:none;">
+      <div id="noShotYet" class="empty">Your captured frame will show up here.</div>
+      <label class="eyebrow" style="margin-top:16px;display:block;">Card name (edit if the OCR got it wrong)</label>
+      <input type="text" id="nameField" placeholder="e.g. Charizard, Black Lotus, Dark Magician">
+<div class="controls">
+        <button class="scan-btn" id="lookupBtn" disabled>Compare matches</button>
+  <button class="grade-btn" id="gradeBtn" disabled>Grade card</button>
+</div>
+<div class="status-line" id="ocrStatus"></div>
+<div id="gradeResult" class="grade-result" hidden></div>
+</div>
+  </div>
+
+  <details class="chase-manager">
+    <summary>Add a chase / high-value card</summary>
+    <form class="chase-form" id="chaseForm">
+      <select id="chaseGame" required>
+        <option value="pokemon">Pokémon</option>
+        <option value="magic">Magic: The Gathering</option>
+        <option value="yugioh">Yu-Gi-Oh!</option>
+        <option value="justtcg">Other TCG</option>
+      </select>
+      <input id="chaseName" required placeholder="Card name, e.g. Charizard">
+      <input id="chaseAliases" class="wide" placeholder="Aliases, separated by commas">
+      <input id="chaseSet" placeholder="Set name">
+      <input id="chaseNumber" placeholder="Card number">
+      <label class="wide">Chase card image
+        <input id="chaseImage" type="url" placeholder="Image URL (optional)">
+        <input id="chaseImageFile" type="file" accept="image/*" style="display:block; margin-top:8px;">
+      </label>
+      <img id="chaseImagePreview" class="chase-image-preview" alt="Chase card preview">
+      <input id="chaseUsd" type="number" min="0" step="0.01" placeholder="USD value (optional)">
+      <input id="chasePhp" type="number" min="0" step="0.01" placeholder="PHP value (optional)">
+      <button type="submit" class="scan-btn">Add to chase database</button>
+    </form>
+    <div class="status-line" id="chaseFormStatus"></div>
+    <div class="database-tools">
+      <label class="eyebrow" for="databaseSearch">Search saved chase cards</label>
+      <div class="database-search">
+        <input id="databaseSearch" placeholder="Search by name, set, or alias">
+        <button type="button" id="databaseSearchButton">Search</button>
+      </div>
+      <div class="database-results" id="databaseResults"></div>
+    </div>
+  </details>
+
+  <div class="results" id="resultsWrap" style="display:none;">
+    <h2>Matches — tap the right card</h2>
+    <div id="chaseAlert" class="chase-alert" style="display:none;"></div>
+    <div class="card-grid" id="cardGrid"></div>
+  </div>
+
+  <div class="detail" id="detailWrap" style="display:none;">
+    <img id="detailImg" src="" alt="">
+    <div>
+      <span class="source-tag" id="sourceTag">tcgdex.dev</span>
+      <h3 id="detailName" class="display"></h3>
+      <div class="setline" id="detailSet"></div>
+      <div class="price-ticket" id="priceTicket"></div>
+    </div>
+  </div>
+</main>
+
+<footer>Card data and prices pulled live from tcgdex.dev, Scryfall, and YGOPRODeck. Prototype — not financial advice.</footer>
+
+<script>
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const startCam = document.getElementById('startCam');
+const shootBtn = document.getElementById('shootBtn');
+const fileInput = document.getElementById('fileInput');
+const camStatus = document.getElementById('camStatus');
+const shotPreview = document.getElementById('shotPreview');
+const noShotYet = document.getElementById('noShotYet');
+const nameField = document.getElementById('nameField');
+const lookupBtn = document.getElementById('lookupBtn');
+const gradeBtn = document.getElementById('gradeBtn');
+const ocrStatus = document.getElementById('ocrStatus');
+const gradeResult = document.getElementById('gradeResult');
+const resultsWrap = document.getElementById('resultsWrap');
+const cardGrid = document.getElementById('cardGrid');
+const chaseAlert = document.getElementById('chaseAlert');
+const chaseForm = document.getElementById('chaseForm');
+const chaseFormStatus = document.getElementById('chaseFormStatus');
+const detailWrap = document.getElementById('detailWrap');
+const gameSwitch = document.getElementById('gameSwitch');
+const sourceTag = document.getElementById('sourceTag');
+let stream = null;
+let currentImageHash = '';
+let currentImageDataUrl = '';
+let gradeRequest = 0;
+let chaseImageHash = '';
+
+if (location.protocol === 'file:') {
+  camStatus.textContent = 'Camera needs a localhost page. Run this folder with a local server, then open http://localhost:8000.';
+}
+
+// TCGdex SDK instance (English card data) — used for Pokémon
+const tcgdex = new TCGdex('en');
+
+let currentGame = 'pokemon';
+let searchRequest = 0;
+let pokemonCatalogPromise = null;
+const GAME_META = {
+  pokemon: { label: 'Pokémon', source: 'tcgdex.dev + TCGplayer', placeholder: 'e.g. Charizard', tcgplayerCategory: '3' },
+  magic:   { label: 'Magic: The Gathering', source: 'scryfall.com + TCGplayer', placeholder: 'e.g. Black Lotus', tcgplayerCategory: '1' },
+  yugioh:  { label: 'Yu-Gi-Oh!', source: 'ygoprodeck.com + TCGplayer', placeholder: 'e.g. Dark Magician', tcgplayerCategory: '2' },
+  justtcg: { label: 'More TCGs', source: 'justtcg.com', placeholder: 'e.g. Elsa' }
+};
+
+// ⚠️ PROTOTYPE ONLY — DO NOT SHIP THIS.
+// JustTCG's own docs say never to expose your API key in client-side code:
+// anyone who opens dev tools on this page can read this key straight out
+// of the JS and spend your quota. This is fine for testing on your own
+// machine; before sharing this file or deploying it anywhere, move this
+// call behind a small backend/serverless function that holds the key as
+// a server-side env var, and regenerate this key from your JustTCG
+// dashboard once you're done testing it here.
+const JUSTTCG_API_KEY = 'tcg_1dfd14d5e1af4ee89034a2a37559000f';
+
+const justtcgGameRow = document.getElementById('justtcgGameRow');
+const justtcgGameSelect = document.getElementById('justtcgGameSelect');
+let justtcgGamesLoaded = false;
+const chaseImageFile = document.getElementById('chaseImageFile');
+const chaseImagePreview = document.getElementById('chaseImagePreview');
+const databaseSearch = document.getElementById('databaseSearch');
+const databaseSearchButton = document.getElementById('databaseSearchButton');
+const databaseResults = document.getElementById('databaseResults');
+let editingChaseId = null;
+
+databaseSearchButton.addEventListener('click', searchChaseDatabase);
+databaseSearch.addEventListener('keydown', event => { if (event.key === 'Enter') searchChaseDatabase(); });
+
+async function searchChaseDatabase() {
+  databaseResults.textContent = 'Searching database…';
+  try {
+    const response = await fetch('/api/chase-cards?search=' + encodeURIComponent(databaseSearch.value.trim()));
+    const cards = (await response.json()).data || [];
+    databaseResults.innerHTML = cards.length ? '' : '<div class="empty">No saved chase cards found.</div>';
+    cards.forEach(card => {
+      const row = document.createElement('div');
+      row.className = 'database-result';
+      row.innerHTML = '<span>' + card.name + (card.set ? ' · ' + card.set : '') + '</span><button type="button">Edit</button>';
+      row.querySelector('button').addEventListener('click', () => loadChaseForEdit(card));
+      databaseResults.appendChild(row);
+    });
+  } catch (error) { databaseResults.textContent = 'Database search failed.'; }
+}
+
+function loadChaseForEdit(card) {
+  editingChaseId = card.id;
+  document.getElementById('chaseGame').value = card.game;
+  document.getElementById('chaseName').value = card.name;
+  document.getElementById('chaseAliases').value = (card.aliases || []).join(', ');
+  document.getElementById('chaseSet').value = card.set || '';
+  document.getElementById('chaseNumber').value = card.number || '';
+  document.getElementById('chaseImage').value = card.image || '';
+  document.getElementById('chaseUsd').value = card.priceUsd || '';
+  document.getElementById('chasePhp').value = card.pricePhp || '';
+  chaseImageHash = card.imageHash || '';
+  chaseFormStatus.textContent = 'Editing ' + card.name + '. Save changes when ready.';
+}
+
+chaseForm.addEventListener('submit', async event => {
+  event.preventDefault();
+  chaseFormStatus.textContent = 'Saving chase card…';
+  const card = {
+    game: document.getElementById('chaseGame').value,
+    name: document.getElementById('chaseName').value.trim(),
+    aliases: document.getElementById('chaseAliases').value.split(',').map(value => value.trim()).filter(Boolean),
+    set: document.getElementById('chaseSet').value.trim(),
+    number: document.getElementById('chaseNumber').value.trim(),
+    image: document.getElementById('chaseImage').value.trim(),
+    imageHash: chaseImageHash,
+    priceUsd: Number(document.getElementById('chaseUsd').value) || null,
+    pricePhp: Number(document.getElementById('chasePhp').value) || null
+  };
+  try {
+    const endpoint = editingChaseId ? '/api/chase-cards/' + editingChaseId : '/api/chase-cards';
+    const response = await fetch(endpoint, { method: editingChaseId ? 'PUT' : 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(card) });
+    const result = await response.json();
+    if (!response.ok) throw new Error(result.error || 'Could not save card');
+    chaseFormStatus.textContent = 'Saved ' + card.name + ' to the chase database.';
+    chaseForm.reset();
+    editingChaseId = null;
+    chaseImageHash = '';
+    chaseImagePreview.style.display = 'none';
+  } catch (error) {
+    chaseFormStatus.textContent = error.message + ' Make sure you are using http://localhost:8000.';
+  }
+});
+
+chaseImageFile.addEventListener('change', event => {
+  const file = event.target.files[0];
+  if (!file) return;
+  const objectUrl = URL.createObjectURL(file);
+  const image = new Image();
+  image.onload = async () => {
+    chaseImageHash = await createImageHash(image);
+    chaseImagePreview.src = objectUrl;
+    chaseImagePreview.style.display = 'block';
+    URL.revokeObjectURL(objectUrl);
+  };
+  image.src = objectUrl;
+});
+
+async function loadJustTcgGames() {
+  if (justtcgGamesLoaded) return;
+  try {
+    const res = await fetch('https://api.justtcg.com/v1/games', {
+      headers: { 'x-api-key': JUSTTCG_API_KEY }
+    });
+    if (!res.ok) throw new Error('API returned ' + res.status);
+    const json = await res.json();
+    const games = json.data || [];
+    if (!games.length) throw new Error('No games returned');
+    justtcgGameSelect.innerHTML = games.map(g => `<option value="${g.id}">${g.name}</option>`).join('');
+    justtcgGamesLoaded = true;
+  } catch (err) {
+    justtcgGameSelect.innerHTML = '<option value="">Could not load games (' + err.message + ')</option>';
+  }
+}
+
+gameSwitch.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-game]');
+  if (!btn) return;
+  currentGame = btn.dataset.game;
+  gameSwitch.querySelectorAll('button').forEach(b => b.classList.toggle('active', b === btn));
+  nameField.placeholder = GAME_META[currentGame].placeholder;
+  resultsWrap.style.display = 'none';
+  detailWrap.style.display = 'none';
+  justtcgGameRow.style.display = currentGame === 'justtcg' ? 'block' : 'none';
+  if (currentGame === 'justtcg') loadJustTcgGames();
+});
+
+startCam.addEventListener('click', async () => {
+  if (location.protocol === 'file:') {
+    camStatus.textContent = 'Camera is blocked on file pages. Open this app at http://localhost:8000, then allow camera access.';
+    return;
+  }
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+    camStatus.textContent = 'Camera access is not supported here. Try "Upload photo instead".';
+    return;
+  }
+  try {
+    if (stream) stream.getTracks().forEach(track => track.stop());
+    stream = await navigator.mediaDevices.getUserMedia({
+      audio: false,
+      video: {
+        facingMode: { ideal: 'environment' },
+        width: { ideal: 1920 },
+        height: { ideal: 1080 }
+      }
+    });
+    video.srcObject = stream;
+    await video.play();
+    shootBtn.disabled = false;
+    startCam.textContent = 'Restart camera';
+    camStatus.textContent = 'Camera live. Fill most of the frame with the card and hit Capture.';
+  } catch (err) {
+    shootBtn.disabled = true;
+    const reason = err.name === 'NotAllowedError'
+      ? 'Allow camera access in the browser address bar, then try again.'
+      : err.name === 'NotFoundError'
+        ? 'No camera was found on this device.'
+        : 'Check browser permission and that no other app is using the camera.';
+    camStatus.textContent = 'Could not access camera. ' + reason;
+  }
+});
+
+shootBtn.addEventListener('click', () => {
+  if (!video.videoWidth || !video.videoHeight) {
+    camStatus.textContent = 'Camera is still starting. Try Capture again in a moment.';
+    return;
+  }
+  canvas.width = video.videoWidth;
+  canvas.height = video.videoHeight;
+  canvas.getContext('2d', { alpha: false }).drawImage(video, 0, 0, canvas.width, canvas.height);
+  useImageFromCanvas();
+});
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const img = new Image();
+  img.onload = () => {
+    canvas.width = img.width;
+    canvas.height = img.height;
+    canvas.getContext('2d', { alpha: false }).drawImage(img, 0, 0, canvas.width, canvas.height);
+    useImageFromCanvas();
+    URL.revokeObjectURL(img.src);
+  };
+  img.src = URL.createObjectURL(file);
+});
+
+function useImageFromCanvas() {
+  const dataUrl = canvas.toDataURL('image/png');
+  currentImageDataUrl = dataUrl;
+  shotPreview.src = dataUrl;
+  shotPreview.style.display = 'block';
+  noShotYet.style.display = 'none';
+  currentImageHash = createImageHash(canvas);
+  lookupBtn.disabled = !nameField.value.trim();
+  gradeBtn.disabled = false;
+  gradeResult.hidden = true;
+  gradeResult.textContent = '';
+  runOCR();
+}
+
+function createImageHash(source) {
+  const hashCanvas = document.createElement('canvas');
+  hashCanvas.width = 16;
+  hashCanvas.height = 16;
+  const context = hashCanvas.getContext('2d', { willReadFrequently: true });
+  context.drawImage(source, 0, 0, 16, 16);
+  const pixels = context.getImageData(0, 0, 16, 16).data;
+  let total = 0;
+  const grayscale = [];
+  for (let index = 0; index < pixels.length; index += 4) {
+    const value = pixels[index] * 0.299 + pixels[index + 1] * 0.587 + pixels[index + 2] * 0.114;
+    grayscale.push(value);
+    total += value;
+  }
+  const average = total / grayscale.length;
+  return grayscale.map(value => value >= average ? '1' : '0').join('');
+}
+
+function makeOcrImage(startRatio, heightRatio) {
+  const sourceWidth = canvas.width;
+  const sourceHeight = canvas.height;
+  const startY = Math.floor(sourceHeight * startRatio);
+  const cropHeight = Math.max(1, Math.floor(sourceHeight * heightRatio));
+  const ocrCanvas = document.createElement('canvas');
+  ocrCanvas.width = Math.min(2400, Math.max(1500, sourceWidth * 2));
+  ocrCanvas.height = Math.floor(cropHeight * ocrCanvas.width / sourceWidth);
+  const context = ocrCanvas.getContext('2d', { willReadFrequently: true });
+  context.imageSmoothingEnabled = true;
+  context.imageSmoothingQuality = 'high';
+  context.drawImage(canvas, 0, startY, sourceWidth, cropHeight, 0, 0, ocrCanvas.width, ocrCanvas.height);
+  const w = ocrCanvas.width;
+  const h = ocrCanvas.height;
+  const imageData = context.getImageData(0, 0, w, h);
+  const px = imageData.data;
+  const gray = new Float32Array(w * h);
+  for (let i = 0; i < gray.length; i++) {
+    const p = i * 4;
+    gray[i] = px[p] * 0.299 + px[p + 1] * 0.587 + px[p + 2] * 0.114;
+  }
+  const blurred = new Float32Array(w * h);
+  for (let y = 1; y < h - 1; y++) {
+    for (let x = 1; x < w - 1; x++) {
+      let sum = 0;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) sum += gray[(y + dy) * w + (x + dx)];
+      blurred[y * w + x] = sum / 9;
+    }
+  }
+  for (let x = 0; x < w; x++) { blurred[x] = gray[x]; blurred[(h - 1) * w + x] = gray[(h - 1) * w + x]; }
+  for (let y = 0; y < h; y++) { blurred[y * w] = gray[y * w]; blurred[y * w + w - 1] = gray[y * w + w - 1]; }
+  const sharpened = new Float32Array(w * h);
+  for (let i = 0; i < sharpened.length; i++) sharpened[i] = Math.max(0, Math.min(255, gray[i] + (gray[i] - blurred[i]) * 1.5));
+  const histogram = new Uint32Array(256);
+  for (let i = 0; i < sharpened.length; i++) histogram[Math.round(sharpened[i])]++;
+  const total = sharpened.length;
+  let sumAll = 0;
+  for (let i = 0; i < 256; i++) sumAll += i * histogram[i];
+  let sumB = 0; let wB = 0; let maxVariance = 0; let threshold = 128;
+  for (let i = 0; i < 256; i++) {
+    wB += histogram[i];
+    if (wB === 0) continue;
+    const wF = total - wB;
+    if (wF === 0) break;
+    sumB += i * histogram[i];
+    const mB = sumB / wB;
+    const mF = (sumAll - sumB) / wF;
+    const variance = wB * wF * (mB - mF) * (mB - mF);
+    if (variance > maxVariance) { maxVariance = variance; threshold = i; }
+  }
+  for (let i = 0; i < sharpened.length; i++) {
+    const val = sharpened[i] >= threshold ? 255 : 0;
+    const p = i * 4;
+    px[p] = px[p + 1] = px[p + 2] = val;
+  }
+  context.putImageData(imageData, 0, 0);
+  return ocrCanvas.toDataURL('image/png');
+}
+
+function extractConfidentWords(words) {
+  if (!words || !words.length) return [];
+  return words
+    .filter(w => w.confidence >= 55 && w.text && w.text.trim().length >= 3)
+    .sort((a, b) => b.confidence - a.confidence)
+    .map(w => w.text.trim());
+}
+
+function isLikelyCardName(text) {
+  if (!text) return false;
+  const t = text.trim().toLowerCase();
+  // Card names typically: 3-30 chars, start with uppercase or are fully capitalized terms,
+  // contain letters and maybe numbers, avoid being pure numbers or common words
+  if (t.length < 3 || t.length > 30) return false;
+  // Must contain at least 2 letters
+  const letterCount = (t.match(/[a-z]/g) || []).length;
+  if (letterCount < 2) return false;
+  // Common non-name patterns that Tesseract often mistakes
+  const badPatterns = [
+    /^\d+$/, // pure numbers
+    /^(the|and|or|but|for|from|with|that|this)\s*$/, // single ignored words
+    /^(hp|attack|defense|power|health)\s*\d+$/, // "hp 120" style
+    /^\d+\s*\d+$/, // "120/100" style
+  ];
+  for (const pattern of badPatterns) {
+    if (pattern.test(t)) return false;
+  }
+  // Should not be all numbers
+  if (/^\d+$/.test(t)) return false;
+  return true;
+}
+
+async function runOCR() {
+  ocrStatus.textContent = 'Reading card name…';
+  ocrStatus.classList.add('active');
+  lookupBtn.disabled = true;
+  try {
+    // Try Google Vision backend first
+    let googleResult = '';
+    let googleCardRegion = null;
+    try {
+      const canvas = document.getElementById('canvas');
+      const dataUrl = canvas.toDataURL('image/png');
+      const response = await fetch('/api/ocr', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(dataUrl.split(',')[1])
+      });
+      const result = await response.json();
+      if (response.ok && result.data) {
+        googleResult = result.data.text || '';
+        googleCardRegion = result.data.cardRegion || null;
+        // Also have access to: result.data.allBlocks, result.data.bestBlock
+      }
+    } catch (e) {
+      // Google Vision not configured - fall back to Tesseract below
+      console.log('Google Vision not available, using Tesseract');
+    }
+
+    // If Google Vision detected a card region, crop and OCR that region
+    if (googleCardRegion) {
+      const canvas = document.getElementById('canvas');
+      const rect = googleCardRegion;
+      // Calculate crop coordinates as percentages of canvas size
+      const canvasWidth = canvas.width;
+      const canvasHeight = canvas.height;
+      const cropX = Math.max(0, rect.x) / canvasWidth;
+      const cropY = Math.max(0, rect.y) / canvasHeight;
+      const cropW = Math.min((rect.width / canvasWidth) * 2, 1); // scale up slightly
+      const cropH = Math.min((rect.height / canvasHeight) * 2, 1);
+      
+      // Use makeOcrImage with the computed ratios - it already does preprocessing
+      const croppedImage = makeOcrImage(cropY, cropH); // startRatio, heightRatio
+      // Actually makeOcrImage uses startRatio from top and heightRatio of total height
+      // We need to adjust: startRatio = cropY, but heightRatio should be cropH relative to remaining
+      // Let me use a different approach - create a temporary canvas crop
+      
+      // Simpler: just run OCR on the full image but the preprocessing already helps
+      // The cardRegion info is mainly for debugging; the enhanced preprocessing helps overall
+      // For now, fall through to Tesseract with the improved preprocessing
+      // But mark that we attempted Google Vision
+    }
+
+    // Fall back to enhanced Tesseract OCR (runs regardless)
+    const logProgress = message => {
+      if (message.status === 'recognizing text' && message.progress) {
+        ocrStatus.textContent = 'Reading card name… ' + Math.round(message.progress * 100) + '%';
+      }
+    };
+    const titleOptions = { logger: logProgress, tessedit_pageseg_mode: '8' };
+    const blockOptions = { logger: logProgress, tessedit_pageseg_mode: '6' };
+    const allGuesses = [];
+    const allConfidentWords = [];
+    // Multiple title crop regions to catch names at different vertical positions
+    const titleCrops = [
+      makeOcrImage(0, 0.20),   // top 20%
+      makeOcrImage(0.05, 0.20), // 5-25%
+      makeOcrImage(0.10, 0.20), // 10-30%
+      makeOcrImage(0, 0.25),    // original 30% fallback
+    ];
+    for (const crop of titleCrops) {
+      const result = await Tesseract.recognize(crop, 'eng', titleOptions);
+      const guesses = extractGuesses(result.data.text);
+      for (const g of guesses) {
+        if (!allGuesses.some(e => e.toLowerCase() === g.toLowerCase()) && isLikelyCardName(g)) {
+          allGuesses.push(g);
+        }
+      }
+      const words = extractConfidentWords(result.data.words);
+      for (const w of words) {
+        if (!allConfidentWords.some(e => e.toLowerCase() === w.toLowerCase()) && isLikelyCardName(w)) {
+          allConfidentWords.push(w);
+        }
+      }
+    }
+    // Also try full card but with PSM 11 (sparse text) to avoid reading whole card
+    const fullResult = await Tesseract.recognize(makeOcrImage(0, 1), 'eng', { ...blockOptions, tessedit_pageseg_mode: '11' });
+    const fullGuesses = extractGuesses(fullResult.data.text);
+    for (const g of fullGuesses) {
+      if (!allGuesses.some(e => e.toLowerCase() === g.toLowerCase()) && isLikelyCardName(g)) {
+        allGuesses.push(g);
+      }
+    }
+    const fullWords = extractConfidentWords(fullResult.data.words);
+    for (const w of fullWords) {
+      if (!allConfidentWords.some(e => e.toLowerCase() === w.toLowerCase()) && isLikelyCardName(w)) {
+        allConfidentWords.push(w);
+      }
+    }
+    // Pick best guess: prefer title crops, then check confidence
+    let guess = allGuesses[0] || '';
+    if (allConfidentWords.length > 0 && (!guess || allConfidentWords.some(w => nameMatchScore(w, guess) >= 80))) {
+      const sortedConfident = allConfidentWords.sort((a, b) => {
+        const scoreA = nameMatchScore(a, allGuesses[0] || a);
+        const scoreB = nameMatchScore(b, allGuesses[0] || b);
+        return scoreB - scoreA || b.length - a.length;
+      });
+      guess = sortedConfident[0];
+      allGuesses.unshift(guess);
+    }
+    document.getElementById('nameField').value = guess;
+    if (guess) {
+      ocrStatus.textContent = 'AI read "' + guess + '". Searching the card database…';
+      lookupBtn.disabled = false;
+      await searchCards(guess, true, allGuesses.slice(0, 3));
+    } else {
+      ocrStatus.textContent = 'Could not confidently read a name — type it in manually.';
+    }
+  } catch (err) {
+    ocrStatus.textContent = 'OCR failed (' + err.message + '). Type the name manually.';
+  } finally {
+    ocrStatus.classList.remove('active');
+    lookupBtn.disabled = !document.getElementById('nameField').value.trim();
+  }
+}
+
+function cleanGuess(rawText) {
+  const ignored = new Set([
+    'the', 'from', 'this', 'that', 'with', 'your', 'when', 'you', 'and', 'for',
+    'card', 'power', 'energy', 'evolves', 'pokemon', 'pok', 'mon', 'weakness',
+    'resistance', 'retreat', 'length', 'weight', 'damage', 'burn', 'illustrator',
+    'copyright', 'stage', 'basic', 'trainer', 'ability', 'hp', 'hit',
+    'points', 'attack', 'flip', 'discard', 'bench', 'defending', 'turn',
+    'opponent', 'player', 'each', 'other', 'then', 'also', 'only',
+    'colorless', 'attached', 'during', 'before', 'after', 'between',
+    'once', 'twice', 'next', 'take', 'give', 'move', 'play', 'put',
+    'cannot', 'counter', 'prize', 'prizes', 'deck', 'hand', 'field',
+    'bench', 'spot', 'card', 'effect', 'trait', 'rule', 'used',
+    'metal', 'fire', 'water', 'grass', 'lightning', 'psychic', 'darkness', 'fighting',
+    'fairy', 'dragon', 'trainer', 'supporter', 'item', 'tool', 'stadium',
+    'ex', 'gx', 'v', 'vmax', 'vstar', 'lv', 'level',
+    'spirit', 'victory', 'radiant', 'amazing', 'rainbow', 'secret', 'rare',
+    'common', 'uncommon', 'promo', 'illustration', 'alt', 'full',
+    'art', 'special', 'radiance', 'base', 'set', 'series',
+    '1st', 'edition', 'unlimited', 'japanese', 'english', 'chinese',
+    'korean', 'french', 'german', 'spanish', 'italian', 'portuguese'
+  ]);
+  const metadataLine = /evolves?\s+from|pokemon\s+power|weakness|resistance|retreat\s+cost|length\s*:|weight\s*:|illustrator|copyright|damage\s+|hit\s+points|hp\s+\d|attack\s*:|flipping?\s+a\s+coin|discard\s+|your\s+opponent|during\s+your|before\s+attacking|at\s+the\s+end/i;
+  const candidates = [];
+  rawText.split('\n').map(line => line.replace(/[^a-zA-Z0-9 '\-:.]/g, ' ').replace(/\s+/g, ' ').trim())
+    .filter(line => line.length >= 3 && line.length <= 60 && !metadataLine.test(line))
+    .forEach(line => {
+      const words = line.split(' ').filter(word => /[a-zA-Z]{3,}/.test(word) && !ignored.has(word.toLowerCase()));
+      if (!words.length || words.length > 5) return;
+      const candidate = words.join(' ');
+      let score = 0;
+      if (words.length === 1 && candidate.length >= 4) score += 5;
+      else if (words.length === 2) score += 4;
+      else if (words.length === 3) score += 3;
+      if (candidate.length >= 4 && candidate.length <= 30) score += 3;
+      if (line === candidate) score += 2;
+      if (words.length <= 2 && line === candidate) score += 2;
+      const wordsUpper = words.filter(w => /^[A-Z]/.test(w));
+      if (wordsUpper.length === words.length && words.length > 1) score += 2;
+      candidates.push({ candidate, score });
+      if (words.length <= 3 && line === candidate) {
+        words.forEach(word => {
+          if (word.length >= 4 && !ignored.has(word.toLowerCase())) {
+            candidates.push({ candidate: word, score: score - words.length + Math.min(word.length, 12) / 3 });
+          }
+        });
+      }
+    });
+  candidates.sort((left, right) => right.score - left.score || left.candidate.length - right.candidate.length);
+  return candidates[0] ? candidates[0].candidate : '';
+}
+
+function extractGuesses(rawText) {
+  const guesses = [];
+  rawText.split('\n').forEach(line => {
+    const guess = cleanGuess(line);
+    if (guess && !guesses.some(existing => existing.toLowerCase() === guess.toLowerCase())) guesses.push(guess);
+  });
+  const combined = cleanGuess(rawText);
+  if (combined && !guesses.some(existing => existing.toLowerCase() === combined.toLowerCase())) guesses.unshift(combined);
+  return guesses.slice(0, 3);
+}
+
+nameField.addEventListener('input', () => {
+  lookupBtn.disabled = !nameField.value.trim();
+});
+
+lookupBtn.addEventListener('click', () => searchCards(nameField.value.trim(), false, [nameField.value.trim()]));
+
+gradeBtn.addEventListener('click', gradeCurrentCard);
+
+async function gradeCurrentCard() {
+  if (!currentImageDataUrl) return;
+  const requestId = ++gradeRequest;
+  gradeBtn.disabled = true;
+  gradeResult.hidden = false;
+  gradeResult.textContent = 'Submitting image for AI grading…';
+  try {
+    const submitResponse = await fetch('/api/card-grade', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ image: currentImageDataUrl })
+    });
+    const submitted = await submitResponse.json();
+    if (!submitResponse.ok) throw new Error(submitted.error || 'Could not submit the card.');
+    if (!submitted.id) throw new Error('Ximilar did not return a grading request id.');
+    gradeResult.textContent = 'Card submitted. Analyzing corners, edges, surface, and centering…';
+
+    for (let attempt = 0; attempt < 45; attempt++) {
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      const statusResponse = await fetch('/api/card-grade/' + encodeURIComponent(submitted.id));
+      const status = await statusResponse.json();
+      if (!statusResponse.ok) throw new Error(status.error || 'Could not read grading status.');
+      if (status.status === 'DONE') {
+        if (requestId === gradeRequest) renderGradeResult(status.response);
+        return;
+      }
+      if (status.status === 'FAILED' || status.status === 'ERROR') {
+        throw new Error(status.error || 'Ximilar could not grade this image.');
+      }
+    }
+    throw new Error('Grading is taking longer than expected. Try again shortly.');
+  } catch (error) {
+    if (requestId === gradeRequest) gradeResult.textContent = 'Grading failed: ' + error.message;
+  } finally {
+    if (requestId === gradeRequest) gradeBtn.disabled = false;
+  }
+}
+
+function renderGradeResult(response) {
+  const record = response?.records?.[0] || {};
+  const grades = record.grades || {};
+  const values = [
+    ['Corners', grades.corners],
+    ['Edges', grades.edges],
+    ['Surface', grades.surface],
+    ['Centering', grades.centering]
+  ].filter(([, value]) => value != null);
+  const heading = document.createElement('strong');
+  heading.textContent = 'AI grade: ' + (grades.final ?? '—') +
+    (record.condition ? ' · ' + record.condition : '');
+  gradeResult.replaceChildren(heading);
+  if (values.length) {
+    const details = document.createElement('div');
+    details.textContent = values.map(([label, value]) => label + ': ' + value).join('  ·  ');
+    gradeResult.appendChild(details);
+  }
+  const links = [record._full_url_card, record._exact_url_card].filter(Boolean);
+  if (links.length) {
+    const linkRow = document.createElement('div');
+    links.forEach((url, index) => {
+      const link = document.createElement('a');
+      link.href = url;
+      link.target = '_blank';
+      link.rel = 'noopener';
+      link.textContent = index ? 'View extracted card' : 'View grading overlay';
+      if (index) linkRow.append(' · ');
+      linkRow.appendChild(link);
+    });
+    gradeResult.appendChild(linkRow);
+  }
+}
+
+window.addEventListener('beforeunload', () => {
+  if (stream) stream.getTracks().forEach(track => track.stop());
+});
+
+async function searchCards(name, automatic, guesses) {
+  if (!name) return;
+  const requestId = ++searchRequest;
+  resultsWrap.style.display = 'block';
+  detailWrap.style.display = 'none';
+  chaseAlert.style.display = 'none';
+  chaseAlert.textContent = '';
+  cardGrid.innerHTML = '<div class="empty">Comparing similar cards from ' + GAME_META[currentGame].source + '…</div>';
+  try {
+    const chaseResponse = await fetch('/api/chase-cards?q=' + encodeURIComponent(name) + '&game=' + encodeURIComponent(currentGame) + '&imageHash=' + encodeURIComponent(currentImageHash));
+    if (chaseResponse.ok) {
+      const chaseMatches = (await chaseResponse.json()).data || [];
+      if (chaseMatches.length) {
+        const top = chaseMatches[0];
+        const php = top.pricePhp != null ? '₱' + Number(top.pricePhp).toLocaleString('en-PH', { minimumFractionDigits: 2 }) : '';
+        const usd = top.priceUsd != null ? '$' + Number(top.priceUsd).toLocaleString('en-US', { minimumFractionDigits: 2 }) : '';
+        const prices = [php, usd].filter(Boolean).join(' / ') || 'Value not added yet';
+        chaseAlert.innerHTML = (top.image ? '<img src="' + top.image + '" alt="' + top.name + '">' : '') +
+          '<div><div class="chase-alert-title">CHASE CARD: ' + top.name + '</div>' +
+          '<div>' + (top.set ? top.set : '') + (top.number ? ' · #' + top.number : '') + ' · ' + top.score + '% match</div>' +
+          '<div class="chase-alert-value">' + prices + '</div></div>';
+        chaseAlert.style.display = 'block';
+      }
+    }
+    const queries = (guesses || [name]).filter(Boolean).slice(0, 3);
+    const responses = await Promise.all(queries.map(async query => {
+      const sourceResults = [];
+      if (currentGame === 'pokemon') sourceResults.push(await searchPokemon(query, false));
+      else if (currentGame === 'magic') sourceResults.push(await searchMagic(query, false));
+      else if (currentGame === 'yugioh') sourceResults.push(await searchYugioh(query, false));
+      else sourceResults.push(await searchJustTcg(query, false));
+      if (GAME_META[currentGame].tcgplayerCategory) {
+        try { sourceResults.push(await searchTcgplayer(query, false)); } catch (error) { console.warn(error.message); }
+      }
+      return sourceResults.flat();
+    }));
+    const merged = new Map();
+    responses.flat().filter(tile => nameMatchScore(name, tile.name) >= 50).forEach(tile => {
+      const key = tile.id || tile.name.toLowerCase() + '|' + tile.subtitle;
+      const existing = merged.get(key);
+      if (!existing || tile.score > existing.score) merged.set(key, tile);
+    });
+    const matches = Array.from(merged.values());
+    renderTiles(matches);
+    if (requestId === searchRequest && automatic) {
+      ocrStatus.textContent = 'AI found similar cards. Tap the closest match to see prices, or edit the name to try again.';
+      resultsWrap.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+  } catch (err) {
+    if (requestId === searchRequest) cardGrid.innerHTML = '<div class="empty">Lookup failed: ' + err.message + '</div>';
+  }
+}
+
+function renderTiles(tiles) {
+  if (!tiles.length) {
+    cardGrid.innerHTML = '<div class="empty">No matches. Try adjusting the spelling in the name field above.</div>';
+    return;
+  }
+  cardGrid.innerHTML = '';
+  tiles.sort((a, b) => (b.score || 0) - (a.score || 0)).forEach(tile => {
+    const el = document.createElement('div');
+    el.className = 'card-tile';
+    const art = tile.thumb
+      ? `<img src="${tile.thumb}" alt="${tile.name}" onerror="this.replaceWith(Object.assign(document.createElement('div'),{className:'thumb-placeholder',textContent:'${(tile.name || '?').charAt(0)}'}))">`
+      : `<div class="thumb-placeholder">${(tile.name || '?').charAt(0)}</div>`;
+    el.innerHTML = `
+      ${art}
+      <div class="tname">${tile.name}</div>
+      <div class="tset">${tile.subtitle || ''}</div>
+      ${tile.score ? '<div class="match-score">' + tile.score + '% name match</div>' : ''}
+    `;
+    el.addEventListener('click', tile.onSelect);
+    cardGrid.appendChild(el);
+  });
+}
+
+function nameMatchScore(query, candidate) {
+  const left = query.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g, '');
+  const right = candidate.toLowerCase().normalize('NFKD').replace(/[^a-z0-9]/g, '');
+  const rightWords = candidate.toLowerCase().normalize('NFKD').split(/[^a-z0-9]+/).filter(Boolean);
+  if (!left || !right) return 0;
+  if (left === right) return 100;
+  if (right.startsWith(left)) return 94;
+  if (left.length >= 4 && rightWords.some(token => token === left)) return 92;
+  const previous = Array.from({ length: right.length + 1 }, (_, index) => index);
+  for (let row = 1; row <= left.length; row++) {
+    let diagonal = previous[0];
+    previous[0] = row;
+    for (let column = 1; column <= right.length; column++) {
+      const above = previous[column];
+      previous[column] = left[row - 1] === right[column - 1]
+        ? diagonal
+        : Math.min(diagonal, previous[column - 1], above) + 1;
+      diagonal = above;
+    }
+  }
+  return Math.max(1, Math.round((1 - previous[right.length] / Math.max(left.length, right.length)) * 100));
+}
+
+// ---------- Pokémon (TCGdex) ----------
+async function searchPokemon(name, shouldRender = true) {
+  const res = await fetch('https://api.tcgdex.net/v2/en/cards?name=' + encodeURIComponent(name));
+  if (!res.ok) throw new Error('API returned ' + res.status);
+  let briefs = (await res.json() || []).slice(0, 12);
+  if (!briefs.length) {
+    const correctedName = await findClosestPokemonName(name);
+    if (correctedName) {
+      const correctedResponse = await fetch('https://api.tcgdex.net/v2/en/cards?name=' + encodeURIComponent(correctedName));
+      if (correctedResponse.ok) briefs = (await correctedResponse.json() || []).slice(0, 12);
+    }
+  }
+  const tiles = briefs.map(brief => ({
+    thumb: brief.image + '/low.webp',
+    name: brief.name,
+    subtitle: '#' + brief.localId,
+    score: nameMatchScore(name, brief.name),
+    id: 'tcgdex:' + brief.id,
+    onSelect: () => showDetailPokemon(brief.id)
+  }));
+  if (shouldRender) renderTiles(tiles);
+  return tiles;
+}
+
+async function findClosestPokemonName(query) {
+  if (!pokemonCatalogPromise) {
+    pokemonCatalogPromise = fetch('https://api.tcgdex.net/v2/en/cards')
+      .then(response => response.ok ? response.json() : [])
+      .then(cards => Array.from(new Set(cards.map(card => card.name).filter(Boolean))))
+      .catch(() => []);
+  }
+  const names = await pokemonCatalogPromise;
+  const close = names.map(name => ({ name, score: nameMatchScore(query, name) }))
+    .filter(card => card.score >= 70)
+    .sort((left, right) => right.score - left.score || left.name.length - right.name.length);
+  return close[0] ? close[0].name : '';
+}
+
+async function searchTcgplayer(name, shouldRender = true) {
+  const categoryId = GAME_META[currentGame].tcgplayerCategory;
+  const response = await fetch('/api/tcgplayer/search?q=' + encodeURIComponent(name) + '&categoryId=' + categoryId);
+  if (!response.ok) throw new Error('TCGplayer is unavailable. Start server.js with API credentials.');
+  const cards = (await response.json()).data || [];
+  const tiles = cards.map(card => ({
+    thumb: card.image,
+    name: card.name,
+    subtitle: (card.setName || 'TCGplayer') + (card.price != null ? ' · $' + Number(card.price).toFixed(2) : ''),
+    score: nameMatchScore(name, card.name),
+    id: 'tcgplayer:' + card.id,
+    onSelect: () => {
+      openDetailShell('tcgplayer.com');
+      renderDetailShell(card.image, card.name, card.setName || 'TCGplayer', card.price != null ? [['TCGplayer market', Number(card.price), '$']] : []);
+    }
+  }));
+  if (shouldRender) renderTiles(tiles);
+  return tiles;
+}
+
+async function showDetailPokemon(cardId) {
+  openDetailShell('tcgdex.dev');
+  let card;
+  try {
+    card = await tcgdex.card.get(cardId);
+  } catch (err) {
+    detailFailed(err.message);
+    return;
+  }
+  const img = card.getImageURL ? card.getImageURL('high', 'webp') : (card.image + '/high.webp');
+  const subtitle = (card.set ? card.set.name : '') + ' · #' + card.localId + ' · ' + (card.rarity || 'Unknown rarity');
+
+  const rows = [];
+  const pricing = card.pricing || {};
+  if (pricing.tcgplayer) {
+    ['normal', 'reverse', 'holo', 'firstEdition'].forEach(finish => {
+      const vals = pricing.tcgplayer[finish];
+      if (vals && vals.marketPrice != null) rows.push([finish + ' (TCGplayer)', vals.marketPrice, '$']);
+    });
+  }
+  if (pricing.cardmarket) {
+    if (pricing.cardmarket.avg != null) rows.push(['Cardmarket avg', pricing.cardmarket.avg, '€']);
+    if (pricing.cardmarket['avg-holo'] != null) rows.push(['Cardmarket avg (holo)', pricing.cardmarket['avg-holo'], '€']);
+  }
+  renderDetailShell(img, card.name, subtitle, rows);
+}
+
+// ---------- Magic: The Gathering (Scryfall) ----------
+async function searchMagic(name, shouldRender = true) {
+  const res = await fetch('https://api.scryfall.com/cards/search?q=' + encodeURIComponent(name));
+  if (res.status === 404) { if (shouldRender) renderTiles([]); return []; }
+  if (!res.ok) throw new Error('API returned ' + res.status);
+  const json = await res.json();
+  const cards = (json.data || []).slice(0, 12);
+  const tiles = cards.map(card => {
+    const imgSrc = (card.image_uris && card.image_uris.small) ||
+                   (card.card_faces && card.card_faces[0].image_uris && card.card_faces[0].image_uris.small) || '';
+    return {
+      thumb: imgSrc,
+      name: card.name,
+      subtitle: card.set_name + ' · #' + card.collector_number,
+      score: nameMatchScore(name, card.name),
+      id: card.id,
+      onSelect: () => showDetailMagic(card)
+    };
+  });
+  if (shouldRender) renderTiles(tiles);
+  return tiles;
+}
+
+function showDetailMagic(card) {
+  openDetailShell('scryfall.com');
+  const img = (card.image_uris && card.image_uris.normal) ||
+              (card.card_faces && card.card_faces[0].image_uris && card.card_faces[0].image_uris.normal) || '';
+  const subtitle = card.set_name + ' · #' + card.collector_number + ' · ' + (card.rarity || 'Unknown rarity');
+
+  const rows = [];
+  const p = card.prices || {};
+  if (p.usd != null) rows.push(['USD (non-foil)', parseFloat(p.usd), '$']);
+  if (p.usd_foil != null) rows.push(['USD (foil)', parseFloat(p.usd_foil), '$']);
+  if (p.eur != null) rows.push(['EUR (non-foil)', parseFloat(p.eur), '€']);
+  if (p.eur_foil != null) rows.push(['EUR (foil)', parseFloat(p.eur_foil), '€']);
+  renderDetailShell(img, card.name, subtitle, rows);
+}
+
+// ---------- Yu-Gi-Oh! (YGOPRODeck) ----------
+async function searchYugioh(name, shouldRender = true) {
+  const res = await fetch('https://db.ygoprodeck.com/api/v7/cardinfo.php?fname=' + encodeURIComponent(name));
+  if (res.status === 400) { if (shouldRender) renderTiles([]); return []; }
+  if (!res.ok) throw new Error('API returned ' + res.status);
+  const json = await res.json();
+  const cards = (json.data || []).slice(0, 12);
+  const tiles = cards.map(card => ({
+    thumb: card.card_images && card.card_images[0] ? card.card_images[0].image_url_small : '',
+    name: card.name,
+    subtitle: card.type,
+    score: nameMatchScore(name, card.name),
+    id: String(card.id),
+    onSelect: () => showDetailYugioh(card)
+  }));
+  if (shouldRender) renderTiles(tiles);
+  return tiles;
+}
+
+function showDetailYugioh(card) {
+  openDetailShell('ygoprodeck.com');
+  const img = card.card_images && card.card_images[0] ? card.card_images[0].image_url : '';
+  const subtitle = card.type + (card.race ? ' · ' + card.race : '');
+
+  const rows = [];
+  const p = card.card_prices && card.card_prices[0];
+  if (p) {
+    if (parseFloat(p.tcgplayer_price) > 0) rows.push(['TCGplayer', parseFloat(p.tcgplayer_price), '$']);
+    if (parseFloat(p.cardmarket_price) > 0) rows.push(['Cardmarket', parseFloat(p.cardmarket_price), '€']);
+    if (parseFloat(p.ebay_price) > 0) rows.push(['eBay', parseFloat(p.ebay_price), '$']);
+    if (parseFloat(p.amazon_price) > 0) rows.push(['Amazon', parseFloat(p.amazon_price), '$']);
+    if (parseFloat(p.coolstuffinc_price) > 0) rows.push(['CoolStuffInc', parseFloat(p.coolstuffinc_price), '$']);
+  }
+  renderDetailShell(img, card.name, subtitle, rows);
+}
+
+// ---------- More TCGs (JustTCG — pricing only, no card art) ----------
+async function searchJustTcg(name, shouldRender = true) {
+  const game = justtcgGameSelect.value;
+  if (!game) { if (shouldRender) renderTiles([]); return []; }
+  const url = 'https://api.justtcg.com/v1/cards?q=' + encodeURIComponent(name) +
+              '&game=' + encodeURIComponent(game) + '&limit=12';
+  const res = await fetch(url, { headers: { 'x-api-key': JUSTTCG_API_KEY } });
+  if (!res.ok) throw new Error('API returned ' + res.status + ' — check the API key / rate limit');
+  const json = await res.json();
+  const cards = Array.isArray(json.data) ? json.data : (json.data && Array.isArray(json.data.cards) ? json.data.cards : []);
+  const tiles = cards.map(card => ({
+    thumb: '', // JustTCG is pricing data only, no card images
+    name: card.name,
+    subtitle: (card.set_name || card.set || '') + (card.rarity ? ' · ' + card.rarity : ''),
+    score: nameMatchScore(name, card.name),
+    id: String(card.id || card.name),
+    onSelect: () => showDetailJustTcg(card)
+  }));
+  if (shouldRender) renderTiles(tiles);
+  return tiles;
+}
+
+function showDetailJustTcg(card) {
+  openDetailShell('justtcg.com');
+  const subtitle = (card.set_name || card.set || '') + (card.rarity ? ' · ' + card.rarity : '');
+  const rows = (card.variants || [])
+    .filter(v => v.price != null)
+    .slice(0, 10)
+    .map(v => [v.condition + ' · ' + v.printing, v.price, '$']);
+  renderDetailShell('', card.name, subtitle, rows);
+}
+
+// ---------- Shared detail rendering ----------
+function openDetailShell(sourceLabel) {
+  detailWrap.style.display = 'grid';
+  sourceTag.textContent = sourceLabel;
+  document.getElementById('detailImg').style.display = 'block';
+  document.getElementById('detailName').textContent = 'Loading…';
+  document.getElementById('detailSet').textContent = '';
+  document.getElementById('priceTicket').innerHTML = '';
+  detailWrap.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+}
+
+function detailFailed(message) {
+  document.getElementById('detailName').textContent = 'Could not load card';
+  document.getElementById('priceTicket').innerHTML = '<div class="empty">' + message + '</div>';
+}
+
+function renderDetailShell(img, name, subtitle, rows) {
+  const imgEl = document.getElementById('detailImg');
+  if (img) {
+    imgEl.style.display = 'block';
+    imgEl.src = img;
+  } else {
+    imgEl.style.display = 'none';
+  }
+  document.getElementById('detailName').textContent = name;
+  document.getElementById('detailSet').textContent = subtitle;
+  const ticket = document.getElementById('priceTicket');
+  ticket.innerHTML = '';
+  rows.forEach(([label, value, symbol]) => {
+    ticket.appendChild(priceRow(label, value, symbol));
+    if (symbol === '$') addPhpPrice(ticket, label, value);
+  });
+  if (!rows.length) {
+    ticket.innerHTML = '<div class="empty">No pricing data available for this printing yet.</div>';
+  }
+}
+
+let usdPhpRatePromise = null;
+function addPhpPrice(ticket, label, value) {
+  if (!usdPhpRatePromise) {
+    usdPhpRatePromise = fetch('/api/exchange/usd-php')
+      .then(response => response.ok ? response.json() : Promise.reject(new Error('rate unavailable')))
+      .then(data => Number(data.rate));
+  }
+  usdPhpRatePromise.then(rate => {
+    if (!Number.isFinite(rate)) return;
+    ticket.appendChild(priceRow(label + ' (PHP)', value * rate, '₱'));
+  }).catch(() => {});
+}
+
+function priceRow(label, value, symbol) {
+  const row = document.createElement('div');
+  row.className = 'price-row mono';
+  row.innerHTML = `<span class="label">${label}</span><span class="val">${symbol || '$'}${value.toFixed(2)}</span>`;
+  return row;
+}
+</script>
+
+</body>
+</html>

@@ -1,0 +1,203 @@
+[
+  {
+    "game": "pokemon",
+    "name": "Charizard",
+    "aliases": [
+      "Charizard Base Set",
+      "Base Set Charizard"
+    ],
+    "set": "Base Set",
+    "number": "4/102",
+    "image": "https://assets.tcgdex.net/en/base/base1/4/high.webp",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Pikachu Illustrator",
+    "aliases": [
+      "Illustrator Pikachu"
+    ],
+    "set": "Promo",
+    "number": "No. 1 Trainer",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "magic",
+    "name": "Black Lotus",
+    "aliases": [
+      "Black Lotus Alpha",
+      "Black Lotus Beta"
+    ],
+    "set": "Alpha / Beta",
+    "number": "232",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Team Rocket's Meowth",
+    "aliases": [
+      "Meowth"
+    ],
+    "set": "Destined Rivals",
+    "number": "203/182",
+    "image": "",
+    "imageHash": "1111101111100111100000000000000110000000000110011000000000000001101001000000000110000000000000011000111100000001100011110000000110011110000000011101111111000001111111111111111111111111100011111111111111110001100011110000001110000000000001011111101111111111",
+    "priceUsd": 26.23,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Lugia",
+    "aliases": ["Neo Genesis Lugia", "Lugia Holo"],
+    "set": "Neo Genesis",
+    "number": "9/111",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Shining Charizard",
+    "aliases": ["Shining Charizard Holo"],
+    "set": "Neo Destiny",
+    "number": "107/105",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Crystal Charizard",
+    "aliases": ["Charizard Crystal Type"],
+    "set": "Skyridge",
+    "number": "146/144",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Umbreon VMAX",
+    "aliases": ["Moonbreon", "Umbreon VMAX Alt Art"],
+    "set": "Evolving Skies",
+    "number": "215/203",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Rayquaza VMAX",
+    "aliases": ["Rayquaza VMAX Alt Art"],
+    "set": "Evolving Skies",
+    "number": "218/203",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Gengar VMAX",
+    "aliases": ["Gengar VMAX Alt Art"],
+    "set": "Fusion Strike",
+    "number": "271/264",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Blaziken VMAX",
+    "aliases": ["Blaziken VMAX Alt Art"],
+    "set": "Chilling Reign",
+    "number": "201/198",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Giratina V",
+    "aliases": ["Giratina V Alt Art"],
+    "set": "Lost Origin",
+    "number": "186/196",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Lugia V",
+    "aliases": ["Lugia V Alt Art"],
+    "set": "Silver Tempest",
+    "number": "186/195",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Magikarp",
+    "aliases": ["Magikarp Illustration Rare"],
+    "set": "Paldea Evolved",
+    "number": "203/193",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Charizard ex",
+    "aliases": ["Charizard ex Special Illustration Rare"],
+    "set": "Obsidian Flames",
+    "number": "223/197",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Mew ex",
+    "aliases": ["Mew ex Special Illustration Rare"],
+    "set": "151",
+    "number": "205/165",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Pikachu ex",
+    "aliases": ["Pikachu ex Special Illustration Rare"],
+    "set": "Surging Sparks",
+    "number": "238/191",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Latias ex",
+    "aliases": ["Latias ex Special Illustration Rare"],
+    "set": "Surging Sparks",
+    "number": "239/191",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  },
+  {
+    "game": "pokemon",
+    "name": "Greninja ex",
+    "aliases": ["Greninja ex Special Illustration Rare"],
+    "set": "Twilight Masquerade",
+    "number": "214/167",
+    "image": "",
+    "priceUsd": null,
+    "pricePhp": null
+  }
+]
